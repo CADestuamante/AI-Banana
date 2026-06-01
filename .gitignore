@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+.venv*/
+.env
+.env.*
+
+# Tooling
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Data and artifacts
+data/**
+!data/**/.gitkeep
+models/**
+!models/**/.gitkeep
+reports/**
+!reports/**/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db

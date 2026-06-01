@@ -1,0 +1,24 @@
+docs/
+  requirements.md
+  architecture.md
+configs/
+  default.yaml
+data/
+  raw/
+  processed/
+  annotations/
+  external/
+models/
+reports/
+scripts/
+src/
+  banana_ai/
+    app.py
+    config.py
+    data/
+    inference/
+    reporting/
+    storage/
+    ui/
+    utils/
+tests/
