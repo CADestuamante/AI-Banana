@@ -1,92 +1,88 @@
-"""Authentication service.
+"""Authentication service — dùng SQLite thông qua UserRepository.
 
-Credentials are stored as SHA-256 hashes in a local JSON file
-(configs/users.json).  On first run the file is created with two
-default accounts so the application is usable out of the box.
-
-Default credentials
--------------------
-  operator / operator123   (Role.OPERATOR)
-  admin    / admin123      (Role.MANAGER)
-
-Production deployments should change these passwords immediately
-and ideally replace this module with a proper identity provider.
+Lần đầu chạy sẽ tự tạo DB và seed 2 tài khoản mặc định:
+  operator / operator123   (role: operator)
+  admin    / admin123      (role: admin)
 """
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
-from pathlib import Path
 from typing import Optional
 
 from banana_ai.auth.models import Role, User
+from banana_ai.database.connection import init_database
+from banana_ai.database.user_repository import UserRepository
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_USERS = [
-    {"username": "operator", "password_hash": "", "role": "operator"},
-    {"username": "admin",    "password_hash": "", "role": "manager"},
-]
-
-_DEFAULT_PASSWORDS = {
-    "operator": "operator123",
-    "admin":    "admin123",
-}
-
-_USERS_FILE = Path("configs/users.json")
+_DB_PATH: str = "data/processed/banana_ai.db"
+_repo: Optional[UserRepository] = None
 
 
-def _hash(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+def _get_repo() -> UserRepository:
+    global _repo
+    if _repo is None:
+        _repo = UserRepository(_DB_PATH)
+    return _repo
 
 
-def _ensure_users_file() -> None:
-    """Create users.json with defaults if it does not exist."""
-    if _USERS_FILE.exists():
-        return
-    _USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    records = []
-    for entry in _DEFAULT_USERS:
-        records.append({
-            "username":      entry["username"],
-            "password_hash": _hash(_DEFAULT_PASSWORDS[entry["username"]]),
-            "role":          entry["role"],
-        })
-    _USERS_FILE.write_text(json.dumps(records, indent=2), encoding="utf-8")
-    logger.info("Created default users file at %s", _USERS_FILE)
+def init_auth(db_path: str) -> None:
+    """Gọi 1 lần khi khởi động app, truyền db_path từ config."""
+    global _DB_PATH, _repo
+    _DB_PATH = db_path
+    _repo = None
+    init_database(db_path)
+    _seed_default_users(db_path)
 
 
-def _load_users() -> list[dict]:
-    _ensure_users_file()
-    return json.loads(_USERS_FILE.read_text(encoding="utf-8"))
+def _seed_default_users(db_path: str) -> None:
+    """Tạo tài khoản mặc định nếu DB trống."""
+    repo = UserRepository(db_path)
+    defaults = [
+        ("operator", "operator123", "Nhân viên mặc định", "NV-000", "operator"),
+        ("admin",    "admin123",    "Quản trị viên",      "NV-001", "admin"),
+    ]
+    for username, password, full_name, employee_id, role in defaults:
+        if repo.get_by_username(username) is None:
+            try:
+                repo.create(username, password, full_name, employee_id, role)
+                logger.info("Seeded default user '%s'", username)
+            except Exception as exc:
+                logger.warning("Seed user '%s' failed: %s", username, exc)
 
 
 def login(username: str, password: str) -> Optional[User]:
-    """Return a User if credentials are valid, otherwise None."""
-    users = _load_users()
-    pw_hash = _hash(password)
-    for record in users:
-        if record["username"] == username and record["password_hash"] == pw_hash:
-            try:
-                role = Role(record["role"])
-            except ValueError:
-                logger.warning("Unknown role '%s' for user '%s'", record["role"], username)
-                return None
-            logger.info("User '%s' logged in as %s", username, role.value)
-            return User(username=username, role=role)
-    logger.warning("Failed login attempt for username '%s'", username)
-    return None
+    """Xác thực và trả về User nếu hợp lệ, None nếu sai."""
+    repo = _get_repo()
+    try:
+        db_user = repo.authenticate(username, password)
+    except PermissionError as exc:
+        logger.warning(str(exc))
+        return None
+
+    if db_user is None:
+        logger.warning("Failed login for '%s'", username)
+        return None
+
+    # Map role string -> Role enum
+    role_map = {"operator": Role.OPERATOR, "admin": Role.ADMIN, "manager": Role.MANAGER}
+    role = role_map.get(db_user.role, Role.OPERATOR)
+
+    logger.info("User '%s' logged in as %s", username, role.value)
+    return User(
+        username=db_user.username,
+        role=role,
+        db_id=db_user.id,
+        full_name=db_user.full_name,
+        employee_id=db_user.employee_id,
+    )
 
 
 def change_password(username: str, old_password: str, new_password: str) -> bool:
-    """Change a user's password.  Returns True on success."""
-    users = _load_users()
-    old_hash = _hash(old_password)
-    for record in users:
-        if record["username"] == username and record["password_hash"] == old_hash:
-            record["password_hash"] = _hash(new_password)
-            _USERS_FILE.write_text(json.dumps(users, indent=2), encoding="utf-8")
-            logger.info("Password changed for user '%s'", username)
-            return True
-    return False
+    """Đổi mật khẩu. Trả về True nếu thành công."""
+    repo = _get_repo()
+    db_user = repo.authenticate(username, old_password)
+    if db_user is None:
+        return False
+    repo.update_password(db_user.id, new_password)
+    return True

@@ -27,6 +27,7 @@ class InputSection:
 
 @dataclass
 class StorageSection:
+    db_path: str 
     history_path: str
     reports_path: str
 

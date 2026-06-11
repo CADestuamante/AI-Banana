@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash   TEXT    NOT NULL,
     full_name       TEXT    NOT NULL,
     employee_id     TEXT    NOT NULL UNIQUE,
-    role            TEXT    NOT NULL CHECK (role IN ('admin', 'operator')),
+    role            TEXT    NOT NULL CHECK (role IN ('admin', 'operator', 'manager')),
     status          TEXT    NOT NULL DEFAULT 'active'
                             CHECK (status IN ('active', 'blocked')),
     created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))

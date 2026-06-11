@@ -11,7 +11,11 @@ def main() -> None:
     config: AppConfig = load_config()
     setup_logging(config.app.log_level)
 
-    # Qt app must be created before any QWidget
+    # Khởi tạo DB + seed tài khoản mặc định (phải trước khi tạo QApplication)
+    from banana_ai.auth.service import init_auth
+    init_auth(config.storage.db_path)
+
+    # Qt app phải được tạo trước bất kỳ QWidget nào
     from PySide6.QtWidgets import QApplication
     app = QApplication(sys.argv)
     app.setApplicationName(config.app.name)
@@ -22,12 +26,11 @@ def main() -> None:
 
     dlg = LoginDialog()
     if dlg.exec() != QDialog.Accepted or dlg.user is None:
-        # User closed the dialog without logging in
         sys.exit(0)
 
     user = dlg.user
 
-    # ── Main window (placeholder, will be built in next step) ──────────
+    # ── Main window ────────────────────────────────────────────────────
     from banana_ai.ui.main_window import MainWindow
     window = MainWindow(config=config, user=user)
     window.show()

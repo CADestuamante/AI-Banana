@@ -13,6 +13,7 @@ input:
   file_path: data/raw/sample.mp4
 
 storage:
+  db_path: data/processed/banana_ai.db
   history_path: data/processed/history.csv
   reports_path: reports
 
