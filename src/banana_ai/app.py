@@ -17,8 +17,27 @@ def main() -> None:
 
     # Qt app phải được tạo trước bất kỳ QWidget nào
     from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QPalette, QColor
     app = QApplication(sys.argv)
     app.setApplicationName(config.app.name)
+    
+    # ── Force light mode (không bị dark mode của VS Code ảnh hưởng) ────
+    app.setStyle("Fusion")
+    light_palette = QPalette()
+    light_palette.setColor(QPalette.Window, QColor(255, 255, 255))
+    light_palette.setColor(QPalette.WindowText, QColor(0, 0, 0))
+    light_palette.setColor(QPalette.Base, QColor(255, 255, 255))
+    light_palette.setColor(QPalette.AlternateBase, QColor(240, 240, 240))
+    light_palette.setColor(QPalette.ToolTipBase, QColor(255, 255, 255))
+    light_palette.setColor(QPalette.ToolTipText, QColor(0, 0, 0))
+    light_palette.setColor(QPalette.Text, QColor(0, 0, 0))
+    light_palette.setColor(QPalette.Button, QColor(240, 240, 240))
+    light_palette.setColor(QPalette.ButtonText, QColor(0, 0, 0))
+    light_palette.setColor(QPalette.BrightText, QColor(255, 255, 255))
+    light_palette.setColor(QPalette.Link, QColor(0, 102, 204))
+    light_palette.setColor(QPalette.Highlight, QColor(76, 175, 80))
+    light_palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+    app.setPalette(light_palette)
 
     # ── Login ──────────────────────────────────────────────────────────
     from PySide6.QtWidgets import QDialog

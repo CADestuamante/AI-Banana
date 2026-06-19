@@ -47,7 +47,17 @@ class AppConfig:
 
 
 def load_config(config_path: str = "configs/default.yaml") -> AppConfig:
+    # Nếu là đường dẫn tương đối, tìm từ thư mục cha của module
     path = Path(config_path)
+    if not path.is_absolute():
+        # Tìm thư mục project gốc (chứa src/)
+        current = Path(__file__).resolve().parent
+        while current != current.parent:
+            if (current.parent / "configs" / "default.yaml").exists():
+                path = current.parent / config_path
+                break
+            current = current.parent
+    
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     return AppConfig(
         app=AppSection(**data["app"]),

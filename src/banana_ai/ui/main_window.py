@@ -14,6 +14,7 @@ from datetime import date, datetime
 from typing import Dict, List, Optional
 
 from PySide6.QtCore import (
+    QDate,
     QElapsedTimer,
     Qt,
     QTimer,
@@ -29,7 +30,9 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
+    QCalendarWidget,
     QComboBox,
+    QDateEdit,
     QDialog,
     QFileDialog,
     QFrame,
@@ -351,6 +354,7 @@ class HistoryTab(QWidget):
         super().__init__(parent)
         self._db_path = db_path
         self._user = user
+        self._use_date_filter = False
         self._build_ui()
         self._load_sessions()
 
@@ -381,21 +385,54 @@ class HistoryTab(QWidget):
 
         root.addLayout(toolbar)
 
-        # Filter
-        filter_bar = QHBoxLayout()
-        filter_bar.addWidget(QLabel("Lọc theo ngày:"))
-        self._filter_date = QLineEdit()
-        self._filter_date.setPlaceholderText("YYYY-MM-DD (để trống = tất cả)")
-        self._filter_date.setFixedWidth(180)
-        self._filter_date.setFixedHeight(28)
+        # Filter bar
+        filter_frame = QFrame()
+        filter_frame.setStyleSheet(
+            "QFrame { background: #F9F9F9; border: 1px solid #E8E8E8; border-radius: 6px; }"
+            "QLabel { color: #444444; font-size: 12px; }"
+        )
+        filter_bar = QHBoxLayout(filter_frame)
+        filter_bar.setContentsMargins(12, 8, 12, 8)
+        filter_bar.setSpacing(10)
+        
+        label = QLabel("📅 Lọc theo ngày:")
+        label.setStyleSheet("color: #333333; font-weight: 500;")
+        filter_bar.addWidget(label)
+        
+        self._filter_date = QDateEdit()
+        self._filter_date.setDate(QDate.currentDate())
+        self._filter_date.setCalendarPopup(True)
+        self._filter_date.setReadOnly(False)
+        self._filter_date.setFixedWidth(140)
+        self._filter_date.setFixedHeight(32)
+        self._filter_date.setStyleSheet(
+            "QDateEdit { border: 1px solid #ccc; border-radius: 6px; padding: 0 8px; "
+            "  background: white; color: #333333; font-size: 12px; }"
+            "QDateEdit:focus { border-color: #F5A623; }"
+            "QCalendarWidget { background: white; color: #333333; }"
+            "QCalendarWidget QToolButton { color: #333333; }"
+        )
         filter_bar.addWidget(self._filter_date)
-        btn_filter = QPushButton("Lọc")
-        btn_filter.setFixedHeight(28)
+        
+        btn_clear = QPushButton("✕ Xóa")
+        btn_clear.setFixedHeight(32)
+        btn_clear.setFixedWidth(70)
+        btn_clear.setStyleSheet(
+            "QPushButton { border: 1px solid #ccc; border-radius: 6px; padding: 0 12px; "
+            "  background: white; color: #666666; font-size: 12px; }"
+            "QPushButton:hover { background: #F5F5F5; }"
+        )
+        btn_clear.clicked.connect(self._clear_date_filter)
+        filter_bar.addWidget(btn_clear)
+        
+        btn_filter = QPushButton("🔍 Lọc")
+        btn_filter.setFixedHeight(32)
         btn_filter.setStyleSheet(self._btn_style())
-        btn_filter.clicked.connect(self._load_sessions)
+        btn_filter.clicked.connect(self._apply_date_filter)
         filter_bar.addWidget(btn_filter)
+        
         filter_bar.addStretch()
-        root.addLayout(filter_bar)
+        root.addWidget(filter_frame)
 
         # Table
         self._table = QTableWidget()
@@ -409,14 +446,17 @@ class HistoryTab(QWidget):
         self._table.setSelectionBehavior(QTableWidget.SelectRows)
         self._table.setAlternatingRowColors(True)
         self._table.setStyleSheet(
-            "QTableWidget { border: 1px solid #E8E8E8; border-radius: 6px; }"
-            "QHeaderView::section { background: #F5F5F5; font-weight: 600; padding: 6px; }"
+            "QTableWidget { border: 1px solid #E8E8E8; border-radius: 6px; background: white; }"
+            "QHeaderView::section { background: #F5F5F5; color: #333333; font-weight: 600; "
+            "  padding: 6px; border: 1px solid #E8E8E8; }"
+            "QTableWidget::item { color: #333333; padding: 4px; }"
+            "QTableWidget::item:selected { background: #E3F2FD; color: #1565C0; }"
         )
         root.addWidget(self._table)
 
         # Summary bar
         self._summary_lbl = QLabel("")
-        self._summary_lbl.setStyleSheet("color: #666; font-size: 11px;")
+        self._summary_lbl.setStyleSheet("color: #666666; font-size: 12px; font-weight: 500;")
         root.addWidget(self._summary_lbl)
 
     def _load_sessions(self) -> None:
@@ -426,9 +466,9 @@ class HistoryTab(QWidget):
         from banana_ai.database import UserRepository
         user_repo = UserRepository(self._db_path)
 
-        date_filter = self._filter_date.text().strip() if hasattr(self, "_filter_date") else ""
-        if date_filter:
-            sessions = session_repo.list_by_date(date_filter)
+        if self._use_date_filter:
+            selected_date = self._filter_date.date().toString("yyyy-MM-dd")
+            sessions = session_repo.list_by_date(selected_date)
         else:
             sessions = session_repo.list_all(limit=200)
 
@@ -454,15 +494,24 @@ class HistoryTab(QWidget):
                 self._table.setItem(row_idx, col, item)
 
         self._summary_lbl.setText(f"Hiển thị {len(sessions)} phiên")
+    
+    def _clear_date_filter(self) -> None:
+        self._use_date_filter = False
+        self._filter_date.setDate(QDate.currentDate())
+        self._load_sessions()
+    
+    def _apply_date_filter(self) -> None:
+        self._use_date_filter = True
+        self._load_sessions()
 
     def _export_report(self) -> None:
         from banana_ai.database import SessionRepository, AnalyticsRepository
         session_repo = SessionRepository(self._db_path)
         analytics_repo = AnalyticsRepository(self._db_path)
 
-        date_filter = self._filter_date.text().strip()
-        if date_filter:
-            sessions = session_repo.list_by_date(date_filter)
+        if self._use_date_filter:
+            selected_date = self._filter_date.date().toString("yyyy-MM-dd")
+            sessions = session_repo.list_by_date(selected_date)
         else:
             sessions = session_repo.list_all(limit=200)
 
@@ -548,12 +597,13 @@ class UserManagementTab(QWidget):
         add_frame = QFrame()
         add_frame.setStyleSheet(
             "QFrame { background: #F9F9F9; border: 1px solid #E8E8E8; border-radius: 8px; }"
+            "QLabel { color: #333333; }"
         )
         add_layout = QVBoxLayout(add_frame)
         add_layout.setContentsMargins(14, 12, 14, 12)
         add_layout.setSpacing(8)
         add_title = QLabel("Tạo tài khoản mới")
-        add_title.setStyleSheet("font-weight: 600; font-size: 13px;")
+        add_title.setStyleSheet("font-weight: 600; font-size: 13px; color: #1a1a1a;")
         add_layout.addWidget(add_title)
 
         row1 = QHBoxLayout()
@@ -561,11 +611,14 @@ class UserManagementTab(QWidget):
         self._inp_password   = QLineEdit(); self._inp_password.setPlaceholderText("Mật khẩu")
         self._inp_password.setEchoMode(QLineEdit.Password)
         self._inp_fullname   = QLineEdit(); self._inp_fullname.setPlaceholderText("Họ và tên")
-        self._inp_employeeid = QLineEdit(); self._inp_employeeid.setPlaceholderText("Mã NV (vd: NV-003)")
-        for w in [self._inp_username, self._inp_password, self._inp_fullname, self._inp_employeeid]:
+        for w in [self._inp_username, self._inp_password, self._inp_fullname]:
             w.setFixedHeight(32)
+            w.setReadOnly(False)
+            w.setEnabled(True)
             w.setStyleSheet(
-                "QLineEdit { border: 1px solid #ccc; border-radius: 6px; padding: 0 8px; }"
+                "QLineEdit { border: 1px solid #ccc; border-radius: 6px; padding: 0 8px; "
+                "  background: white; color: #333333; }"
+                "QLineEdit::placeholder { color: #999999; }"
                 "QLineEdit:focus { border-color: #F5A623; }"
             )
             row1.addWidget(w)
@@ -573,6 +626,11 @@ class UserManagementTab(QWidget):
         self._inp_role = QComboBox()
         self._inp_role.addItems(["operator", "admin"])
         self._inp_role.setFixedHeight(32)
+        self._inp_role.setStyleSheet(
+            "QComboBox { border: 1px solid #ccc; border-radius: 6px; padding: 0 8px; "
+            "  background: white; color: #333333; }"
+            "QComboBox:focus { border-color: #F5A623; }"
+        )
         row1.addWidget(self._inp_role)
 
         btn_add = QPushButton("➕  Thêm")
@@ -599,8 +657,11 @@ class UserManagementTab(QWidget):
         self._table.setSelectionBehavior(QTableWidget.SelectRows)
         self._table.setAlternatingRowColors(True)
         self._table.setStyleSheet(
-            "QTableWidget { border: 1px solid #E8E8E8; border-radius: 6px; }"
-            "QHeaderView::section { background: #F5F5F5; font-weight: 600; padding: 6px; }"
+            "QTableWidget { border: 1px solid #E8E8E8; border-radius: 6px; background: white; }"
+            "QHeaderView::section { background: #F5F5F5; color: #333333; font-weight: 600; "
+            "  padding: 6px; border: 1px solid #E8E8E8; }"
+            "QTableWidget::item { color: #333333; padding: 4px; }"
+            "QTableWidget::item:selected { background: #E3F2FD; color: #1565C0; }"
         )
         root.addWidget(self._table)
 
@@ -663,20 +724,31 @@ class UserManagementTab(QWidget):
         username    = self._inp_username.text().strip()
         password    = self._inp_password.text()
         full_name   = self._inp_fullname.text().strip()
-        employee_id = self._inp_employeeid.text().strip()
         role        = self._inp_role.currentText()
 
-        if not all([username, password, full_name, employee_id]):
+        if not all([username, password, full_name]):
             QMessageBox.warning(self, "Thiếu thông tin", "Vui lòng điền đầy đủ tất cả các trường.")
             return
 
         from banana_ai.database import UserRepository
         repo = UserRepository(self._db_path)
+        
+        # Auto-generate employee ID
+        all_users = repo.list_all()
+        max_num = 0
+        for user in all_users:
+            if user.employee_id and user.employee_id.startswith("NV-"):
+                try:
+                    num = int(user.employee_id.split("-")[1])
+                    max_num = max(max_num, num)
+                except (ValueError, IndexError):
+                    pass
+        employee_id = f"NV-{max_num + 1:03d}"
+        
         try:
             repo.create(username, password, full_name, employee_id, role)
-            QMessageBox.information(self, "Thành công", f"Đã tạo tài khoản '{username}'.")
-            for w in [self._inp_username, self._inp_password,
-                      self._inp_fullname, self._inp_employeeid]:
+            QMessageBox.information(self, "Thành công", f"Đã tạo tài khoản '{username}' với mã NV: {employee_id}")
+            for w in [self._inp_username, self._inp_password, self._inp_fullname]:
                 w.clear()
             self._load_users()
         except ValueError as exc:
@@ -718,6 +790,12 @@ class MainWindow(QMainWindow):
         self._worker = None
         self._pending_file_path: Optional[str] = None
         self._current_source: str = "camera"
+        self._session_id: Optional[int] = None
+        self._predictions_in_session: Dict[str, int] = {}
+        from banana_ai.database.session_repository import SessionRepository
+        from banana_ai.database.analytics_repository import AnalyticsRepository
+        self._session_repo = SessionRepository(config.storage.db_path)
+        self._analytics_repo = AnalyticsRepository(config.storage.db_path)
         self._build_ui()
         self._start_session_clock()
 
@@ -755,7 +833,7 @@ class MainWindow(QMainWindow):
         layout.addStretch()
 
         # Badge vai trò
-        role_color = {"operator": "#1565C0", "admin": "#6A1B9A", "manager": "#2E7D32"}
+        role_color = {"operator": "#1565C0", "admin": "#000000", "manager": "#2E7D32"}
         role_bg    = {"operator": "#E3F2FD", "admin": "#F3E5F5", "manager": "#E8F5E9"}
         rv = self.user.role.value
         role_badge = QLabel(f"  {self.user.username}  ·  {rv.upper()}  ")
@@ -955,6 +1033,21 @@ class MainWindow(QMainWindow):
 
     def _start_worker(self) -> None:
         from banana_ai.inference.camera_worker import CameraWorker
+        
+        # ── Tạo session mới ──
+        source_detail = self._pending_file_path if self._current_source == "file" else f"Camera_{self.config.input.camera_index}"
+        try:
+            session = self._session_repo.create(
+                operator_id=self.user.db_id,
+                source_type=self._current_source,
+                source_detail=source_detail,
+            )
+            self._session_id = session.id
+            self._predictions_in_session = {"unripe": 0, "turning": 0, "ripe": 0, "overripe": 0}
+        except Exception as e:
+            QMessageBox.warning(self, "Lỗi", f"Không tạo được session: {e}")
+            return
+        
         self._worker = CameraWorker(
             model_path=self.config.inference.model_path,
             confidence_threshold=self.config.inference.confidence_threshold,
@@ -973,6 +1066,22 @@ class MainWindow(QMainWindow):
             self._worker.stop()
             self._worker.wait(3000)
             self._worker = None
+        
+        # ── Lưu session kết thúc + analytics ──
+        if self._session_id:
+            try:
+                self._session_repo.close_session(self._session_id)
+                self._analytics_repo.save(
+                    session_id=self._session_id,
+                    banana_green=self._predictions_in_session.get("unripe", 0),
+                    banana_turning=self._predictions_in_session.get("turning", 0),
+                    banana_ripe=self._predictions_in_session.get("ripe", 0),
+                    banana_overripe=self._predictions_in_session.get("overripe", 0),
+                )
+            except Exception as e:
+                print(f"[ERROR] Lỗi lưu session: {e}")
+            finally:
+                self._session_id = None
 
     @Slot(bool)
     def _on_pause_toggle(self, checked: bool) -> None:
@@ -1018,6 +1127,12 @@ class MainWindow(QMainWindow):
                       latency_ms: float) -> None:
         self._total_detected += len(predictions)
         self._overripe_recent += sum(1 for p in predictions if p.label == "overripe")
+        
+        # ── Cập nhật thống kê session ──
+        for p in predictions:
+            if p.label in self._predictions_in_session:
+                self._predictions_in_session[p.label] += 1
+        
         self._feed.update_frame(frame_pixmap, predictions)
         self._stats.update_stats(
             predictions=predictions,
