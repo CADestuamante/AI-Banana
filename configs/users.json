@@ -1,0 +1,12 @@
+[
+  {
+    "username": "operator",
+    "password_hash": "ec6e1c25258002eb1c67d15c7f45da7945fa4c58778fd7d88faa5e53e3b4698d",
+    "role": "operator"
+  },
+  {
+    "username": "admin",
+    "password_hash": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+    "role": "manager"
+  }
+]
